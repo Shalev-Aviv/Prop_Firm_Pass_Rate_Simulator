@@ -1,0 +1,98 @@
+name: Build Prop Firm Simulator — All Platforms
+
+on:
+  push:
+    paths:
+      - 'prop_firm_simulator.py'
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact_name: prop_firm_simulator
+            asset_name: prop_firm_simulator-linux
+          - os: windows-latest
+            artifact_name: prop_firm_simulator.exe
+            asset_name: prop_firm_simulator-windows.exe
+          - os: macos-latest
+            artifact_name: prop_firm_simulator
+            asset_name: prop_firm_simulator-macos
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller numpy pandas matplotlib
+
+      - name: Build executable
+        run: >
+          pyinstaller --onefile --name prop_firm_simulator
+          --hidden-import numpy
+          --hidden-import pandas
+          --hidden-import matplotlib
+          --hidden-import matplotlib.pyplot
+          --hidden-import matplotlib.font_manager
+          --hidden-import matplotlib.colors
+          --hidden-import matplotlib.backends.backend_agg
+          prop_firm_simulator.py
+
+      - name: Rename artifact for platform
+        shell: bash
+        run: |
+          mkdir -p release
+          cp dist/${{ matrix.artifact_name }} release/${{ matrix.asset_name }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset_name }}
+          path: release/${{ matrix.asset_name }}
+
+  release:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: "Prop Firm Simulator — Build ${{ github.run_number }}"
+          body: |
+            ## Prop Firm Challenge Monte Carlo Simulator
+
+            Download the executable for your operating system:
+
+            | Platform | File |
+            |----------|------|
+            | 🐧 Linux | `prop_firm_simulator-linux` |
+            | 🪟 Windows | `prop_firm_simulator-windows.exe` |
+            | 🍎 macOS | `prop_firm_simulator-macos` |
+
+            ### How to run
+            - **Windows**: Double-click `prop_firm_simulator-windows.exe`
+            - **Linux/macOS**: Open terminal, `chmod +x prop_firm_simulator-*` then `./prop_firm_simulator-linux` or `./prop_firm_simulator-macos`
+          files: release/**/*
+          draft: false
+          prerelease: false
